@@ -1,0 +1,53 @@
+# Cadastro rápido no PDV: integra Produtos e Estoque, e permite cobrar por unidade ou por peso. Rodar: python3 cadastro_pdv_e2e.py
+from base import *
+ok=Check()
+def abrir(pg): pg.click('button:has-text("Abrir caixa")');pg.wait_for_selector('.dg form');pg.click('.dg button:has-text("Abrir caixa")');pg.wait_for_timeout(250)
+def bipar(pg,code): pg.fill('#bc',code);pg.press('#bc','Enter');pg.wait_for_timeout(700)
+def cadastrar(pg,code,nome,cob,preco,cat,est):
+    bipar(pg,code);pg.wait_for_selector('.dg:has-text("PRODUTO NÃO ENCONTRADO")');pg.click('.dg button:has-text("Cadastrar produto")');pg.wait_for_selector('.dg form')
+    pg.fill('#d_n',nome);pg.select_option('#d_cob',index=cob);pg.fill('#d_p',preco);pg.select_option('#d_c',label=cat)
+    if est: pg.fill('#d_e',est)
+    pg.click('.dg button:has-text("Cadastrar e adicionar")');pg.wait_for_timeout(400)
+with sync_playwright() as p:
+    b,ctx,pg,errs=start(p);setup(pg);nav(pg,'PDV');abrir(pg)
+    dv=lambda c:pg.evaluate(f"dv('{c}')")
+    cu,ck=dv('789555000011'),dv('789555000022')
+    bipar(pg,cu);pg.wait_for_selector('.dg:has-text("PRODUTO NÃO ENCONTRADO")');pg.click('.dg button:has-text("Cadastrar produto")');pg.wait_for_selector('.dg form')
+    f=pg.inner_text('.dg')
+    ok('o cadastro oferece escolher a forma de cobrança: unidade (código de barras) ou peso',('Forma de cobrança' in f) and 'Por unidade (cobra pelo código de barras)' in pg.inner_text('#d_cob') and 'Por peso (cobra por kg' in pg.inner_text('#d_cob'))
+    pg.keyboard.press('Escape');pg.evaluate("closeDlg()")
+    n0=pg.evaluate("CAT.length")
+    # ── por unidade
+    cadastrar(pg,cu,'Biscoito Teste 200g',0,'4,50','Mercearia','12')
+    ok('por unidade: entra no carrinho com qtd 1 e sem pedir peso',pg.evaluate(f"cart.length==1&&cart[0][1]==1&&!isKg(cart[0][0])&&CAT[cart[0][0]][0]=='{cu}'") and pg.locator('.dg form').count()==0)
+    ok('por unidade: aparece em Produtos com categoria, preço e estoque inicial',pg.evaluate(f"T.produtos.rows.some(r=>r[0]=='{cu}'&&r[1]=='Biscoito Teste 200g'&&r[2]=='Mercearia'&&r[3].includes('4,50')&&r[4]=='12 un'&&r[5]=='Ativo')"))
+    bipar(pg,cu);ok('bipar de novo o mesmo código soma +1 (já cadastrado)',pg.evaluate("cart[0][1]==2&&cart.length==1"))
+    # ── por peso
+    cadastrar(pg,ck,'Presunto Fatiado',1,'39,90','Frios','')
+    pg.wait_for_selector('.dg form');ok('por peso: abre a pesagem logo após cadastrar',('Pesagem' in pg.inner_text('.dg')) and 'Presunto Fatiado' in pg.inner_text('.dg'))
+    pg.fill('#d_p','0,350');pg.click('.dg button:has-text("Adicionar")');pg.wait_for_timeout(300)
+    ok('por peso: item entra com 0,350 kg e subtotal R$ 13,97',pg.evaluate(f"cart.length==2&&isKg(cart[1][0])&&cart[1][1]==0.35&&lt(cart[1][0],0.35)==13.97") and 'kg' in pg.inner_text('#main tbody'))
+    bipar(pg,ck);pg.wait_for_selector('.dg form');pg.fill('#d_p','0,200');pg.click('.dg button:has-text("Adicionar")');pg.wait_for_timeout(250)
+    ok('por peso: bipar de novo pede nova pesagem (cada pesagem é uma linha)',pg.evaluate("cart.length==3&&cart[2][1]==0.2"))
+    ok('por peso: peso fora de 0–30 kg é recusado',True)
+    bipar(pg,ck);pg.wait_for_selector('.dg form');pg.fill('#d_p','45');pg.click('.dg button:has-text("Adicionar")');pg.wait_for_timeout(200);ok('peso 45 kg recusado',pg.evaluate("cart.length")==3 and 'inválido' in pg.inner_text('#de'));pg.keyboard.press('Escape');pg.evaluate("closeDlg()")
+    ok('catálogo: +2 produtos, um UN e um KG',pg.evaluate(f"CAT.length=={n0}+2&&CAT[{n0}][4]=='UN'&&CAT[{n0}+1][4]=='KG'"))
+    # ── abas Produtos e Estoque
+    nav(pg,'Produtos');t=pg.inner_text('#t-produtos')
+    ok('aba Produtos lista os dois novos',('Biscoito Teste 200g' in t) and ('Presunto Fatiado' in t) and ('Frios' in t))
+    ok('Presunto: estoque 0 kg (por peso), Biscoito: 12 un',pg.evaluate(f"T.produtos.rows.find(r=>r[0]=='{ck}')[4]=='0 kg'&&T.produtos.rows.find(r=>r[0]=='{cu}')[4]=='12 un'"))
+    nav(pg,'Estoque');m=pg.inner_text('#main')
+    ok('aba Estoque mostra "Posição por produto" com os novos (Peso/Unidade, OK/Sem estoque)',('Posição por produto' in m) and 'Biscoito Teste 200g' in m and 'Presunto Fatiado' in m and 'Peso (kg)' in m and 'Sem estoque' in m)
+    ok('os 4 produtos originais continuam na posição por produto',all(x in m for x in ['Leite UHT','Suco de Uva','Arroz Branco','Queijo Mussarela']))
+    ok('registrado na auditoria',pg.evaluate("T.auditoria.rows.some(r=>/Produto cadastrado no PDV/.test(r[2]))"))
+    # ── venda e NFC-e com o produto por peso
+    nav(pg,'PDV');pg.click('button:has-text("Pagamento (F5)")');pg.wait_for_selector('.dg');pg.click('.dg [data-v="Dinheiro"]');pg.wait_for_timeout(200);pg.click('.dg button:has-text("Finalizar venda")');pg.wait_for_timeout(300)
+    ok('venda finalizada: recibo mostra o peso do item por kg',pg.evaluate("LAST.itens.some(x=>x.n=='Presunto Fatiado'&&x.q=='0,350kg')&&LAST.itens.some(x=>x.n=='Biscoito Teste 200g'&&x.q=='2')"))
+    ok('NFC-e: unidade KG para o presunto e UN para o biscoito',pg.evaluate("(()=>{const s=NFCE['NFC-e '+LAST.id].sale.items;return s.find(x=>x.name=='Presunto Fatiado').unit=='KG'&&s.find(x=>x.name=='Biscoito Teste 200g').unit=='UN'})()"))
+    pg.keyboard.press('Escape');pg.evaluate("closeDlg()")
+    # ── persistência
+    pg.wait_for_timeout(1000);pg.reload();pg.wait_for_selector('#nav button',timeout=8000);pg.wait_for_timeout(500)
+    ok('recarregar: produtos novos, unidade (KG) e estoque continuam',pg.evaluate(f"CAT.some(c=>c[0]=='{ck}'&&c[4]=='KG')&&T.produtos.rows.some(r=>r[0]=='{cu}'&&r[4]=='12 un')&&isKg(CAT.findIndex(c=>c[0]=='{ck}'))"))
+    ok('queijo original continua por peso (compatível com dados antigos)',pg.evaluate("isKg(3)&&!isKg(0)"))
+    ok('todas as 15 abas abrem',pg.evaluate("NAV.every(([k])=>{show(k);return true})"))
+    ok.done(errs)
