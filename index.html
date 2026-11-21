@@ -1,8 +1,5 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RENASCER · Sistema de gestão</title>
 <meta name="description" content="Sistema de gestão da RENASCER Distribuidora de Alimentos">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌅%3C/text%3E%3C/svg%3E">
@@ -161,8 +158,6 @@ body.out .util,body.out .hd,body.out #sb,body.out .ft{display:none}
 .toast.w{background:#b91c1c;color:#fff;font-weight:600}
 .md .err:not(:empty){background:var(--er-b);color:var(--er);padding:9px 12px;border-radius:9px;margin:10px 0;font-weight:600}
 </style>
-</head>
-<body>
 <div class="app">
   <div class="util"><span>Distribuidora de alimentos · Atacado e varejo · Recife/PE</span><span><span id="dbst"></span> · <span id="clock"></span></span></div>
   <header class="hd">
@@ -996,5 +991,5 @@ window.addEventListener&&window.addEventListener('error',e=>toast('Erro inespera
 async function boot(){show();await initStore();if(SB){READY=true;if(sbLoadSess()){try{await sbToken();await sbEnter()}catch{sbOut();show()}}else show();return}const s=await loadSnap();applySnap(s);PARTS.forEach(p=>{if(s[p])STORE.last[p]=JSON.stringify(snap()[p])});syncMG();pdvLoad();READY=true;const u=readSess();if(u){ME=u;applyNav();show(canSee(cur)?cur:undefined)}else show()}
 boot();
 </script>
-</body>
-</html>
+
+</body></html>
